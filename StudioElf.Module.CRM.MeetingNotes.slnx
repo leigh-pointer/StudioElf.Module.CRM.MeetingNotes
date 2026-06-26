@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="../../../oqtane.framework/Oqtane.Server/Oqtane.Server.csproj" />
+  <Project Path="StudioElf.Module.CRM.MeetingNotes.csproj" />
+</Solution>

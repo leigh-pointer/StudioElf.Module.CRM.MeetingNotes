@@ -1,0 +1,350 @@
+@namespace StudioElf.Module.CRM.Extensions
+@using Microsoft.AspNetCore.Components.Web
+@using StudioElf.Module.CRM
+@using StudioElf.Module.CRM.Models
+@using StudioElf.Module.CRM.MeetingNotes.Models
+@using StudioElf.Module.CRM.MeetingNotes.Services
+@inherits CrmBase
+@inject IMeetingNotesService MeetingNotesService
+@inject StudioElf.Module.CRM.Services.IEmailService EmailService
+
+@*
+    Meeting Notes — Self-contained extension tab.
+    Shows all meetings across contacts with search and sort.
+    Contact selector is inside the Add/Edit dialog.
+*@
+<div class="crm-shell">
+    @* Toolbar: search, sort, add *@
+    <div class="d-flex justify-content-between align-items-center gap-2 mb-2 flex-wrap">
+        <div class="d-flex align-items-center gap-2">
+            <h6 class="mb-0">@MeetingNotesModuleInfo.DisplayName</h6>
+            <input type="text" class="form-control form-control-sm" style="width:180px;"
+                   placeholder="Search meetings..." @bind="@_searchText" @bind:after="ApplyFilter" />
+            <select class="form-select form-select-sm" style="width:auto;" @bind="@_sortField">
+                <option value="date">Date</option>
+                <option value="title">Title</option>
+                <option value="contact">Contact</option>
+            </select>
+            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="@(() => _sortDesc = !_sortDesc)" title="Toggle sort order">
+                <i class="bi bi-arrow-@(_sortDesc ? "down" : "up")"></i>
+            </button>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="@(AddNewMeeting)">
+            <i class="bi bi-plus-circle me-1"></i>Add Meeting
+        </button>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="text-muted"><em>Loading...</em></p>
+    }
+    else if (_error != null)
+    {
+        <div class="alert alert-warning small py-2">@_error</div>
+    }
+    else if (!_displayItems.Any())
+    {
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-journal-text" style="font-size:2.5rem;"></i>
+            <p class="mt-2 mb-1">@(string.IsNullOrEmpty(_searchText) ? "No meetings recorded yet." : "No meetings match your search.")</p>
+            <small>@(string.IsNullOrEmpty(_searchText) ? "Click \"Add Meeting\" above to record the first meeting." : "Try a different search term.")</small>
+        </div>
+    }
+    else
+    {
+        <div class="list-group list-group-flush">
+            @foreach (var m in _displayItems)
+            {
+                <div class="list-group-item list-group-item-action px-0">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong>@m.Title</strong>
+                            <span class="text-muted small ms-2">
+                                @FormatLocalDate(m.MeetingDate, "MMM dd, yyyy") · @m.DurationMinutes min
+                                @if (!string.IsNullOrEmpty(m.CreatedBy))
+                                {
+                                    <span class="ms-2">· @m.CreatedBy</span>
+                                }
+                                @if (!string.IsNullOrEmpty(m.Location))
+                                {
+                                    <span class="ms-2"><i class="bi bi-geo-alt"></i> @m.Location</span>
+                                }
+                            </span>
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button type="button" class="btn btn-sm btn-outline-info py-0 px-1" @onclick="@(() => SendSummary(m))" title="Send email summary">
+                                <i class="bi bi-envelope"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" @onclick="@(() => BeginEdit(m))" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" @onclick="@(() => ConfirmDelete(m))" title="Delete">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    @if (!string.IsNullOrEmpty(m.Summary))
+                    {
+                        <small class="d-block mt-1 text-muted" style="white-space:pre-wrap;">@m.Summary</small>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@* ── Add/Edit Meeting modal — contains contact selector *@
+@if (_editing)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.3);">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="bi bi-journal-text me-1"></i>@(_editingId > 0 ? "Edit Meeting" : "New Meeting")</h6>
+                    <button type="button" class="btn-close btn-sm" @onclick="@(CancelEdit)"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label class="form-label small">Contact</label>
+                        <select class="form-select form-select-sm" @bind="@_editContactId">
+                            <option value="0">— Select a contact —</option>
+                            @foreach (var c in _contacts)
+                            {
+                                <option value="@c.ContactId">@c.FirstName @c.LastName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Title</label>
+                        <input type="text" class="form-control form-control-sm" placeholder="e.g. Q1 Review" @bind="@_edit.Title" />
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-6">
+                            <label class="form-label small">Date</label>
+                            <input type="date" class="form-control form-control-sm" @bind="@_editDate" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small">Duration (min)</label>
+                            <input type="number" class="form-control form-control-sm" @bind="@_edit.DurationMinutes" />
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Location</label>
+                        <input type="text" class="form-control form-control-sm" placeholder="e.g. Office, Zoom" @bind="@_edit.Location" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Attendees</label>
+                        <input type="text" class="form-control form-control-sm" placeholder="Comma-separated names" @bind="@_edit.Attendees" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">Summary</label>
+                        <textarea class="form-control form-control-sm" rows="3" placeholder="Key discussion points..." @bind="@_edit.Summary"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" @onclick="@(CancelEdit)">Cancel</button>
+                    <button type="button" class="btn btn-sm btn-primary" @onclick="@(SaveMeeting)" disabled="@_saving">
+                        @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                        <i class="bi bi-check-lg me-1"></i>Save
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── Delete confirmation modal ── *@
+@if (_confirmDelete != null)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.3);">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="bi bi-trash me-1"></i>Delete Meeting</h6>
+                    <button type="button" class="btn-close btn-sm" @onclick="@(() => _confirmDelete = null)"></button>
+                </div>
+                <div class="modal-body small">
+                    Delete "<strong>@_confirmDelete.Title</strong>"?
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" @onclick="@(() => _confirmDelete = null)">Cancel</button>
+                    <button type="button" class="btn btn-sm btn-danger" @onclick="@(DeleteMeeting)"><i class="bi bi-trash me-1"></i>Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ContactListDto> _contacts = new();
+    private List<MeetingNoteDto> _allItems = new();
+    private List<MeetingNoteDto> _displayItems = new();
+    private bool _loading = true;
+    private string _error;
+    private string _searchText = "";
+    private string _sortField = "date";
+    private bool _sortDesc = true;
+    private bool _editing;
+    private bool _saving;
+    private int _editingId;
+    private int _editContactId;
+    private CreateMeetingNoteDto _edit = new();
+    private DateOnly? _editDate;
+    private MeetingNoteDto _confirmDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        await LoadContacts();
+        await LoadMeetings();
+    }
+
+    private async Task LoadContacts()
+    {
+        try
+        {
+            var filter = new ContactFilter();
+            _contacts = await CrmService.GetContactsAsync(ModuleState.ModuleId, filter) ?? new();
+        }
+        catch { _contacts = new(); }
+    }
+
+    private async Task LoadMeetings()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _allItems = await MeetingNotesService.GetAllAsync(ModuleState.ModuleId);
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _allItems = new();
+            _displayItems = new();
+        }
+        _loading = false;
+    }
+
+    private void ApplyFilter()
+    {
+        var q = _searchText?.Trim().ToLower() ?? "";
+        var filtered = string.IsNullOrEmpty(q)
+            ? _allItems.ToList()
+            : _allItems.Where(m =>
+                (m.Title?.ToLower().Contains(q) == true) ||
+                (m.Summary?.ToLower().Contains(q) == true) ||
+                (m.Location?.ToLower().Contains(q) == true) ||
+                (m.CreatedBy?.ToLower().Contains(q) == true))
+            .ToList();
+
+        _displayItems = _sortField switch
+        {
+            "title" => _sortDesc ? filtered.OrderByDescending(m => m.Title).ToList()
+                                  : filtered.OrderBy(m => m.Title).ToList(),
+            "contact" => _sortDesc ? filtered.OrderByDescending(m => m.CreatedBy).ToList()
+                                   : filtered.OrderBy(m => m.CreatedBy).ToList(),
+            _ => _sortDesc ? filtered.OrderByDescending(m => m.MeetingDate).ToList()
+                           : filtered.OrderBy(m => m.MeetingDate).ToList(),
+        };
+        StateHasChanged();
+    }
+
+    private void BeginEdit(MeetingNoteDto m)
+    {
+        _editingId = m.Id;
+        _editContactId = m.ContactId;
+        _edit = new()
+        {
+            ContactId = m.ContactId,
+            Title = m.Title,
+            Summary = m.Summary,
+            MeetingDate = m.MeetingDate,
+            DurationMinutes = m.DurationMinutes,
+            Location = m.Location,
+            ActionItems = m.ActionItems,
+            Attendees = m.Attendees
+        };
+        _editDate = DateOnly.FromDateTime(m.MeetingDate);
+        _editing = true;
+    }
+
+    private void CancelEdit()
+    {
+        _editing = false;
+        _editingId = 0;
+        _edit = new();
+    }
+
+    private async Task SaveMeeting()
+    {
+        _saving = true;
+        try
+        {
+            _edit.MeetingDate = _editDate.HasValue ? _editDate.Value.ToDateTime(TimeOnly.MinValue) : DateTime.Today;
+            _edit.ContactId = _editContactId;
+
+            if (_editingId > 0)
+                await MeetingNotesService.UpdateAsync(_editingId, _edit, ModuleState.ModuleId, PageState.User.Username);
+            else
+                await MeetingNotesService.CreateAsync(_edit, ModuleState.ModuleId, PageState.User.Username);
+
+            _editing = false;
+            _editingId = 0;
+            _edit = new();
+            await LoadMeetings();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        _saving = false;
+    }
+
+    private void AddNewMeeting()
+    {
+        _editingId = 0;
+        _editContactId = 0;
+        _edit = new();
+        _editing = true;
+    }
+
+    private async Task SendSummary(MeetingNoteDto m)
+    {
+        try
+        {
+            var tokens = new Dictionary<string, string>
+            {
+                ["MeetingTitle"] = m.Title ?? "",
+                ["MeetingDate"] = m.MeetingDate.ToString("MMM dd, yyyy"),
+                ["AttendeeCount"] = string.IsNullOrEmpty(m.Attendees) ? "0" : m.Attendees.Split(',').Length.ToString(),
+                ["Summary"] = m.Summary ?? "",
+                ["ActionItems"] = m.ActionItems ?? ""
+            };
+            await EmailService.SendTemplateAsync(ModuleState.ModuleId, MeetingNotesModuleInfo.ExtensionId, "Meeting Summary", m.ContactId, tokens);
+            _error = "Summary sent to contact.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private void ConfirmDelete(MeetingNoteDto m) => _confirmDelete = m;
+
+    private async Task DeleteMeeting()
+    {
+        if (_confirmDelete == null) return;
+        try
+        {
+            await MeetingNotesService.DeleteAsync(_confirmDelete.Id, ModuleState.ModuleId);
+            _confirmDelete = null;
+            await LoadMeetings();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}

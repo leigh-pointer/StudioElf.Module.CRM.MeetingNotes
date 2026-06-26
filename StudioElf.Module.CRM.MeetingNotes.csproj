@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>StudioElf.Module.CRM.MeetingNotes.Oqtane</AssemblyName>
+    <RootNamespace>StudioElf.Module.CRM.MeetingNotes</RootNamespace>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../oqtane.framework/Oqtane.Client/Oqtane.Client.csproj" />
+    <ProjectReference Include="../../../oqtane.framework/Oqtane.Server/Oqtane.Server.csproj" />
+    <ProjectReference Include="../../../oqtane.framework/Oqtane.Shared/Oqtane.Shared.csproj" />
+    <Reference Include="StudioElf.Module.CRM.Server">
+      <HintPath>D:\source\_Oqtane Instances\DevStudio.10\oqtane.framework\Oqtane.Server\bin\Debug\net10.0\StudioElf.Module.CRM.Server.Oqtane.dll</HintPath>
+    </Reference>
+    <Reference Include="StudioElf.Module.CRM.Shared">
+      <HintPath>D:\source\_Oqtane Instances\DevStudio.10\oqtane.framework\Oqtane.Server\bin\Debug\net10.0\StudioElf.Module.CRM.Shared.Oqtane.dll</HintPath>
+    </Reference>
+    <Reference Include="StudioElf.Module.CRM.Client">
+      <HintPath>D:\source\_Oqtane Instances\DevStudio.10\oqtane.framework\Oqtane.Server\bin\Debug\net10.0\StudioElf.Module.CRM.Client.Oqtane.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="CopyToOqtane" AfterTargets="Build">
+    <PropertyGroup>
+      <OqtaneBin>D:\source\_Oqtane Instances\DevStudio.10\oqtane.framework\Oqtane.Server\bin\Debug\net10.0\</OqtaneBin>
+    </PropertyGroup>
+    <ItemGroup>
+      <OutputFiles Include="$(OutputPath)$(AssemblyName).dll;$(OutputPath)$(AssemblyName).pdb" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OutputFiles)" DestinationFolder="$(OqtaneBin)" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="PostBuildPackage" AfterTargets="Build">
+    <Exec Condition="'$(OS)' == 'Windows_NT' And '$(Configuration)' == 'Debug'"
+          Command="cd /d $(MSBuildProjectDirectory)\Package &amp; debug.cmd $(TargetFramework)" />
+    <Exec Condition="'$(OS)' == 'Windows_NT' And '$(Configuration)' == 'Release'"
+          Command="cd /d $(MSBuildProjectDirectory)\Package &amp; release.cmd $(TargetFramework)" />
+  </Target>
+
+</Project>

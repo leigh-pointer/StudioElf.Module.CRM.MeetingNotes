@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+    <metadata>
+        <id>$projectname$</id>
+        <version>1.0.0</version>
+        <authors>StudioElf</authors>
+        <owners>StudioElf</owners>
+        <title>Meeting Notes</title>
+        <description>Contacts Meeting Notes</description>
+        <requireLicenseAcceptance>false</requireLicenseAcceptance>
+        <license type="expression">MIT</license>
+        <icon>icon.png</icon>
+        <tags>oqtane module crm</tags>
+        <packageTypes>
+            <packageType name="Dependency" />
+            <packageType name="Oqtane.Framework" version="10.2.0" />
+        </packageTypes>
+    </metadata>
+    <files>
+        <file src="..\bin\Release\$targetframework$\$projectname$.Oqtane.dll" target="lib\$targetframework$" />
+        <file src="..\bin\Release\$targetframework$\$projectname$.Oqtane.pdb" target="lib\$targetframework$" />
+        <file src="icon.png" target="" />
+    </files>
+</package>
