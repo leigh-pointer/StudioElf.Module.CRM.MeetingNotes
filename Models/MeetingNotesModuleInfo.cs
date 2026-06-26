@@ -7,6 +7,6 @@ public static class MeetingNotesModuleInfo
     /// <summary>Label shown in CRM tab bar, extension manager, and dashboard.</summary>
     public const string DisplayName = "Meeting Notes";
     public const string Description = "Contacts Meeting Notes";
-    public const string Version = "0.1.0";
+    public const string Version = "1.0.0";
     public const string IconClass = "bi bi-journal-text";
 }

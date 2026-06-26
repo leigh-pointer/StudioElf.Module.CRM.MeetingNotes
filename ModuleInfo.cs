@@ -18,7 +18,7 @@ public class ModuleInfo : IModule
         Description = MeetingNotesModuleInfo.Description,
         Categories = "Headless",
         Version = MeetingNotesModuleInfo.Version,
-        ReleaseVersions = VersionInfo.Version,
+        ReleaseVersions = MeetingNotesModuleInfo.Version,
         ServerManagerType = "StudioElf.Module.CRM.MeetingNotes.Manager.MeetingNotesManager, StudioElf.Module.CRM.MeetingNotes.Oqtane",
         Dependencies = "StudioElf.Module.CRM.Shared.Oqtane",
         PackageName = "StudioElf.Module.CRM.MeetingNotes"

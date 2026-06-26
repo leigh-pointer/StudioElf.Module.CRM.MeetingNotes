@@ -7,7 +7,7 @@ A CRM extension that adds a **Meeting Notes** self-contained tab with contact se
 **Extension ID:** `MeetingNotes`  
 **Display Name:** Meeting Notes  
 **Icon:** `bi bi-journal-text`  
-**Version:** 0.1.0  
+**Version:** 1.0.0  
 
 ---
 
