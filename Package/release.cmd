@@ -1,7 +1,7 @@
 @echo off
 REM Usage: release.cmd net10.0
 REM Auto-detects the .nuspec file in the current directory.
-set TargetFramework=%1
+if "%1"=="" (set TargetFramework=net10.0) else (set TargetFramework=%1)
 for %%f in (*.nuspec) do set NuspecFile=%%f
 set ProjectName=%NuspecFile:.nuspec=%
 del "*.nupkg"
