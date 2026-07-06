@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using StudioElf.Module.CRM.Models;
 using StudioElf.Module.CRM.Services;
 using StudioElf.Module.CRM.MeetingNotes.Models;
+using StudioElf.Module.CRM.MeetingNotes;
 
 namespace StudioElf.Module.CRM.Extensions;
 

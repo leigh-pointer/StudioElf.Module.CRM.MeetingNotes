@@ -108,6 +108,40 @@ Rendered as an extension tab in the CRM tab bar. Self-contained — does NOT inj
 - Fields: contact, title, date, duration, location, attendees, summary
 - Send Summary button per meeting (email template integration)
 
+### ⚠️ CRITICAL — Shell Component Requirements
+
+The Shell component AND all child components in `Client/Components/` must include these two directives at the top of the .razor file:
+
+```razor
+@attribute [OqtaneIgnore]
+@using Oqtane.Shared
+```
+
+**Why:** The Shell inherits `CrmBase` → `ModuleBase` → `IModuleControl`. Without `[OqtaneIgnore]`, Oqtane's assembly scanner finds it and, since no matching `IModule` exists in the `StudioElf.Module.CRM.MeetingNotes` namespace, creates a ghost `ModuleDefinition` entry with no version number. This results in a duplicate entry in the database — one correct (with version 1.0.0) and one incorrect (no version). The same applies to any child component that inherits `CrmBase`.
+
+**Namespace must match:** The Shell namespace must match the Module namespace (`StudioElf.Module.CRM.MeetingNotes`), NOT `StudioElf.Module.CRM.Extensions`. The old template incorrectly used the Extensions namespace which guaranteed a ghost entry.
+
+```razor
+@attribute [OqtaneIgnore]
+@using Oqtane.Shared
+@namespace StudioElf.Module.CRM.MeetingNotes
+@inherits CrmBase
+```
+
+### Extension Tab Icon
+
+The extension's icon displays in the CRM main tab bar. It is read from `ICrmExtension.IconClass` and rendered via:
+
+```razor
+<i class="@(ext.IconClass ?? "bi bi-puzzle") me-1"></i>@ext.DisplayName
+```
+
+Set `IconClass` in `{name}ModuleInfo.cs`:
+
+```csharp
+public const string IconClass = "bi bi-journal-text";
+```
+
 ### 2. Dashboard Widget
 
 Recent meetings card on CRM dashboard.
