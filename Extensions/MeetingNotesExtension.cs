@@ -31,5 +31,5 @@ public class MeetingNotesExtension : ICrmExtension
             "A meeting was held on {{MeetingDate}} with {{AttendeeCount}} attendees.\n\n{{Summary}}\n\nAction Items:\n{{ActionItems}}")
     };
     public Type GetShellComponentType() => typeof(MeetingNotesShell);
-    public List<TimelineItem> GetTimelineItems(string entityName, int entityId, int moduleId, TimelineFilter filter) => null;
+    public List<TimelineItem> GetTimelineItems(string entityName, int entityId, int moduleId, TimelineFilter filter) => new();
 }
