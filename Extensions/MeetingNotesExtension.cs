@@ -19,7 +19,6 @@ public class MeetingNotesExtension : ICrmExtension
     public string Version => MeetingNotesModuleInfo.Version;
     public string IconClass => MeetingNotesModuleInfo.IconClass;
 
-    public List<CrmNavItem> GetNavItems() => new();
     public List<CrmDashboardWidget> GetDashboardWidgets() => new()
     {
         new("recent-meetings", "Recent Meetings", typeof(RecentMeetingsWidget), 10)

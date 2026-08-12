@@ -1,9 +1,11 @@
 @attribute [OqtaneIgnore]
 @namespace StudioElf.Module.CRM.MeetingNotes
 @using Oqtane.Shared
+@using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Web
 @using StudioElf.Module.CRM
 @using StudioElf.Module.CRM.Models
+@using StudioElf.Module.CRM.Components
 @using StudioElf.Module.CRM.MeetingNotes.Models
 @using StudioElf.Module.CRM.MeetingNotes.Services
 @inherits CrmBase
@@ -36,13 +38,25 @@
         </button>
     </div>
 
+    @* Success/status banner — rendered above the list, never replaces it *@
+    @if (_status != null)
+    {
+        <div class="alert alert-success small py-2 d-flex justify-content-between align-items-center">
+            <span>@_status</span>
+            <button type="button" class="btn-close btn-sm" @onclick="@(() => _status = null)" title="Dismiss"></button>
+        </div>
+    }
+
     @if (_loading)
     {
         <p class="text-muted"><em>Loading...</em></p>
     }
     else if (_error != null)
     {
-        <div class="alert alert-warning small py-2">@_error</div>
+        <div class="alert alert-warning small py-2 d-flex justify-content-between align-items-center">
+            <span>@_error</span>
+            <button type="button" class="btn-close btn-sm" @onclick="@(() => _error = null)" title="Dismiss"></button>
+        </div>
     }
     else if (!_displayItems.Any())
     {
@@ -87,7 +101,8 @@
                     </div>
                     @if (!string.IsNullOrEmpty(m.Summary))
                     {
-                        <small class="d-block mt-1 text-muted" style="white-space:pre-wrap;">@m.Summary</small>
+                        @* Render markdown + @mention tokens as styled spans (inherited from CrmBase) *@
+                        <small class="d-block mt-1 text-muted rendered-content">@((MarkupString)RenderMarkdown(m.Summary))</small>
                     }
                 </div>
             }
@@ -99,7 +114,7 @@
 @if (_editing)
 {
     <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.3);">
-        <div class="modal-dialog modal-sm">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header py-2">
                     <h6 class="modal-title"><i class="bi bi-journal-text me-1"></i>@(_editingId > 0 ? "Edit Meeting" : "New Meeting")</h6>
@@ -140,7 +155,16 @@
                     </div>
                     <div class="mb-2">
                         <label class="form-label small">Summary</label>
-                        <textarea class="form-control form-control-sm" rows="3" placeholder="Key discussion points..." @bind="@_edit.Summary"></textarea>
+                        @* CRM MentionEditor: @mention autocomplete, preview toggle, mention notification emails *@
+                        <MentionEditor @ref="_summaryEditor"
+                                       Content="@_edit.Summary"
+                                       ContentChanged="@((c) => _edit.Summary = c)"
+                                       ModuleId="ModuleState.ModuleId"
+                                       EntityName="Meeting Note"
+                                       EntityId="@_editingId"
+                                       Height="140px"
+                                       ShowPreview="true"
+                                       PreviewRenderer="RenderPreviewAsync" />
                     </div>
                 </div>
                 <div class="modal-footer py-2">
@@ -183,6 +207,7 @@
     private List<MeetingNoteDto> _displayItems = new();
     private bool _loading = true;
     private string _error;
+    private string _status;
     private string _searchText = "";
     private string _sortField = "date";
     private bool _sortDesc = true;
@@ -190,15 +215,75 @@
     private bool _saving;
     private int _editingId;
     private int _editContactId;
+    private int _deepLinkMeetingId;
+    private string _lastDeepLinkUri = "";
     private CreateMeetingNoteDto _edit = new();
     private DateOnly? _editDate;
     private MeetingNoteDto _confirmDelete;
 
+    // Mention editor (CRM component — @mentions + notification emails)
+    private MentionEditor _summaryEditor;
+
+    /// <summary>
+    /// Preview renderer for the MentionEditor — same Markdig pipeline as the
+    /// list view (mentions render as styled spans).
+    /// </summary>
+    private Task<string> RenderPreviewAsync(string markdown)
+        => Task.FromResult(RenderMarkdown(markdown ?? ""));
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+        // Query changes (e.g. navigating to a new ?ticket={id} while this
+        // shell stays alive) re-apply the deep link without recreating the component.
+        _ = ApplyDeepLinkAsync();
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await base.OnInitializedAsync();
+
+        // Deep-link: mention notification emails point here with ?ticket={id}
+        await ApplyDeepLinkAsync();
+
         await LoadContacts();
         await LoadMeetings();
+    }
+
+    /// <summary>
+    /// Reads ?ticket={id} from the URL (the CRM mention notification deep
+    /// link — Index?tab=ext:MeetingNotes&amp;ticket={id}). Falls back to
+    /// PageState.QueryString because NavigationManager.Uri may not include
+    /// query params during SSR. Skipped when the URL is unchanged so the
+    /// edit dialog is not re-opened after the list reloads.
+    /// </summary>
+    private async Task ApplyDeepLinkAsync()
+    {
+        try
+        {
+            var uri = NavigationManager.Uri;
+            if (uri == _lastDeepLinkUri) return;
+            _lastDeepLinkUri = uri;
+
+            string ticketParam = null;
+            if (uri.Contains('?'))
+            {
+                var qs = System.Web.HttpUtility.ParseQueryString(new Uri(uri).Query);
+                ticketParam = qs["ticket"];
+            }
+            if (string.IsNullOrEmpty(ticketParam) && PageState?.QueryString != null && PageState.QueryString.Count > 0)
+            {
+                foreach (var kv in PageState.QueryString)
+                {
+                    if (string.Equals(kv.Key, "ticket", StringComparison.OrdinalIgnoreCase))
+                        ticketParam = kv.Value;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(ticketParam) && int.TryParse(ticketParam, out var meetingId) && meetingId > 0)
+                _deepLinkMeetingId = meetingId;
+        }
+        catch { /* not a deep link */ }
     }
 
     private async Task LoadContacts()
@@ -219,6 +304,14 @@
         {
             _allItems = await MeetingNotesService.GetAllAsync(ModuleState.ModuleId);
             ApplyFilter();
+
+            // Deep link (?ticket={id}) — open that meeting in the edit dialog
+            if (_deepLinkMeetingId > 0)
+            {
+                var meeting = _allItems.FirstOrDefault(m => m.Id == _deepLinkMeetingId);
+                if (meeting != null) BeginEdit(meeting);
+                _deepLinkMeetingId = 0;
+            }
         }
         catch (Exception ex)
         {
@@ -287,11 +380,41 @@
             _edit.MeetingDate = _editDate.HasValue ? _editDate.Value.ToDateTime(TimeOnly.MinValue) : DateTime.Today;
             _edit.ContactId = _editContactId;
 
-            if (_editingId > 0)
-                await MeetingNotesService.UpdateAsync(_editingId, _edit, ModuleState.ModuleId, PageState.User.Username);
+            var meetingId = _editingId;
+            if (meetingId > 0)
+            {
+                await MeetingNotesService.UpdateAsync(meetingId, _edit, ModuleState.ModuleId, PageState.User.Username);
+            }
             else
-                await MeetingNotesService.CreateAsync(_edit, ModuleState.ModuleId, PageState.User.Username);
+            {
+                var created = await MeetingNotesService.CreateAsync(_edit, ModuleState.ModuleId, PageState.User.Username);
+                meetingId = created?.Id ?? 0;
+            }
 
+            // Tell the MentionEditor it is saved WHILE it is still mounted -
+            // NotifyMentionsAsync reads the text back from the live editor
+            // buffer, so it must run before the modal closes and the buffer
+            // is disposed. Every path below is caught, so a notification
+            // failure can never trap the user in the modal.
+            var summary = _edit.Summary;
+            var userName = PageState.User.Username;
+            var mentionUrl = $"Index?tab=ext:{MeetingNotesModuleInfo.ExtensionId}&ticket={meetingId}";
+            try
+            {
+                if (_summaryEditor != null)
+                    await _summaryEditor.NotifyMentionsAsync(userName, mentionUrl);
+                else
+                    await CrmService.ProcessMentionNotificationsAsync(ModuleState.ModuleId, summary, "Meeting Note", meetingId, userName, null, mentionUrl);
+            }
+            catch (Exception ex)
+            {
+                // Monaco interop failed (e.g. editor never initialized in the
+                // modal) - fall back to the captured form content.
+                try { await CrmService.ProcessMentionNotificationsAsync(ModuleState.ModuleId, summary, "Meeting Note", meetingId, userName, null, mentionUrl); }
+                catch { _error = $"Meeting saved, but mention notification failed: {ex.Message}"; }
+            }
+
+            // Close the dialog and reload the list LAST - always reached.
             _editing = false;
             _editingId = 0;
             _edit = new();
@@ -316,16 +439,22 @@
     {
         try
         {
+            // Ensure the default template exists — the CRM seeds extension
+            // templates only when the extension is (re)installed, so a module
+            // installed before this extension loaded has no "Meeting Summary"
+            // template and SendTemplateAsync silently returns. Idempotent.
+            await CrmService.SeedDefaultTemplatesAsync(ModuleState.ModuleId, new() { MeetingNotesModuleInfo.ExtensionId });
+
             var tokens = new Dictionary<string, string>
             {
                 ["MeetingTitle"] = m.Title ?? "",
-                ["MeetingDate"] = m.MeetingDate.ToString("MMM dd, yyyy"),
+                ["MeetingDate"] = m.MeetingDate.ToString("dd-MMM-yyyy"),
                 ["AttendeeCount"] = string.IsNullOrEmpty(m.Attendees) ? "0" : m.Attendees.Split(',').Length.ToString(),
                 ["Summary"] = m.Summary ?? "",
                 ["ActionItems"] = m.ActionItems ?? ""
             };
             await EmailService.SendTemplateAsync(ModuleState.ModuleId, MeetingNotesModuleInfo.ExtensionId, "Meeting Summary", m.ContactId, tokens);
-            _error = "Summary sent to contact.";
+            _status = "Summary sent to contact.";
         }
         catch (Exception ex)
         {

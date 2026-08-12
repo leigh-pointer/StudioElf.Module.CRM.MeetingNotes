@@ -2,7 +2,7 @@
 
 ## Overview
 
-A CRM extension that adds a **Meeting Notes** self-contained tab with contact selector. Users can record meeting date, duration, attendees, summary, and action items linked to CRM contacts. Meetings appear in the extension's unified list with search and sort.
+A CRM extension that adds a **Meeting Notes** self-contained tab with contact selector. Users can record meeting date, duration, attendees, summary, and action items linked to CRM contacts. Meetings appear in the extension's unified list with search and sort. The summary field is a CRM **MentionEditor** — @mention autocomplete, preview toggle, and mention notification emails with a deep link back to the meeting.
 
 **Extension ID:** `MeetingNotes`  
 **Display Name:** Meeting Notes  
@@ -105,8 +105,9 @@ Rendered as an extension tab in the CRM tab bar. Self-contained — does NOT inj
 - Sort — Date, Title, Contact with ascending/descending toggle
 - All meetings list with inline edit/delete
 - Add meeting modal with contact picker
-- Fields: contact, title, date, duration, location, attendees, summary
+- Fields: contact, title, date, duration, location, attendees, summary (MentionEditor — markdown + @mentions)
 - Send Summary button per meeting (email template integration)
+- Deep link (`?ticket={id}`) opens the meeting in the edit dialog — target of mention notification emails
 
 ### ⚠️ CRITICAL — Shell Component Requirements
 
@@ -169,8 +170,46 @@ Placeholder tokens: `{{MeetingTitle}}`, `{{MeetingDate}}`, `{{AttendeeCount}}`, 
 ### 4. Timeline Contribution
 
 ```csharp
-public List<TimelineItem> GetTimelineItems(...) => null;  // returns null when unused
+public List<TimelineItem> GetTimelineItems(...) => new();  // empty list when unused
 ```
+
+---
+
+### 5. Mention Notifications & Deep Links
+
+The summary field is hosted by the CRM **MentionEditor** (namespace `StudioElf.Module.CRM.Components`). Typing `@` searches Oqtane users (scoped by `ModuleId`); accepted mentions store as structured markdown — `@[Sarah Smith](user:12)` — so they survive renames. `#` mentions search contacts/companies/deals.
+
+```razor
+<MentionEditor @ref="_summaryEditor"
+               Content="@_edit.Summary"
+               ContentChanged="@((c) => _edit.Summary = c)"
+               ModuleId="ModuleState.ModuleId"
+               EntityName="Meeting Note"
+               EntityId="@_editingId"
+               Height="140px"
+               ShowPreview="true"
+               PreviewRenderer="RenderPreviewAsync" />
+```
+
+**Save flow — persist first, then tell the editor it is saved.** The editor parses @mention tokens and the CRM emails every mentioned user (Oqtane Notification):
+
+```csharp
+var meetingId = _editingId;
+if (meetingId > 0)
+    await MeetingNotesService.UpdateAsync(meetingId, _edit, ModuleState.ModuleId, PageState.User.Username);
+else
+    meetingId = (await MeetingNotesService.CreateAsync(_edit, ModuleState.ModuleId, PageState.User.Username))?.Id ?? 0;
+
+// After persist — CRM emails mentioned users with a deep link to this meeting
+await _summaryEditor.NotifyMentionsAsync(PageState.User.Username,
+    $"Index?tab=ext:{MeetingNotesModuleInfo.ExtensionId}&ticket={meetingId}");
+```
+
+`tab=ext:MeetingNotes` selects the extension tab; the CRM prepends its known base (site base, page path, module segment), so the email link is `https://your-site/*/31/Index?tab=ext:MeetingNotes&ticket=5`.
+
+**Deep link loading:** the shell reads `ticket` from `NavigationManager.Uri` on load (`PageState.QueryString` fallback — NavigationManager may miss query params during SSR), finds the meeting, and opens it in the edit dialog. See `ApplyDeepLinkAsync` in `Client/MeetingNotesShell.razor`.
+
+**Rendering:** the list view and the editor preview render the summary through `CrmBase.RenderMarkdown` — mention tokens become styled, clickable spans (same pipeline as CRM pages).
 
 ---
 
@@ -277,8 +316,6 @@ public class MeetingNotesExtension : ICrmExtension
 
     public Type GetShellComponentType() => typeof(MeetingNotesShell);
 
-    // Return empty lists, never null
-    public List<CrmNavItem> GetNavItems() => new();
     public List<CrmDashboardWidget> GetDashboardWidgets() => new()
     {
         new("recent-meetings", "Recent Meetings", typeof(RecentMeetingsWidget), 10)
@@ -289,7 +326,7 @@ public class MeetingNotesExtension : ICrmExtension
         new("Meeting Summary", "Meeting Summary: {{MeetingTitle}}",
             "A meeting was held on {{MeetingDate}} with {{AttendeeCount}} attendees.\n\n{{Summary}}\n\nAction Items:\n{{ActionItems}}")
     };
-    public List<TimelineItem> GetTimelineItems(...) => null;
+    public List<TimelineItem> GetTimelineItems(...) => new();  // empty list when unused
 }
 ```
 
