@@ -238,10 +238,9 @@ The following code patterns are **mandatory**. AI codegen must produce these exa
 ```csharp
 using Oqtane.Models;
 using Oqtane.Modules;
-using StudioElf.Module.CRM;
 using StudioElf.Module.CRM.MeetingNotes.Models;
 
-namespace StudioElf.Module.CRM.MeetingNotes;
+namespace StudioElf.Module.MeetingNotes;
 
 public class ModuleInfo : IModule
 {
@@ -251,7 +250,7 @@ public class ModuleInfo : IModule
         Description = MeetingNotesModuleInfo.Description,
         Categories = "Headless",  // prevents showing in Oqtane module picker
         Version = MeetingNotesModuleInfo.Version,
-        ReleaseVersions = VersionInfo.Version,  // migration triggers on version bump
+        ReleaseVersions = "1.0.0",  // literal list: add a version only when it runs a migration
         ServerManagerType = "StudioElf.Module.CRM.MeetingNotes.Manager.MeetingNotesManager, StudioElf.Module.CRM.MeetingNotes.Oqtane",
         Dependencies = "StudioElf.Module.CRM.Shared.Oqtane",  // CRM shared assembly only
         PackageName = "StudioElf.Module.CRM.MeetingNotes"

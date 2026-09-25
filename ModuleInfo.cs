@@ -1,9 +1,8 @@
 using Oqtane.Models;
 using Oqtane.Modules;
-using StudioElf.Module.CRM;
 using StudioElf.Module.CRM.MeetingNotes.Models;
 
-namespace StudioElf.Module.CRM.MeetingNotes;
+namespace StudioElf.Module.MeetingNotes;
 
 /// <summary>
 /// Oqtane IModule registration — required for Oqtane to discover this assembly
@@ -18,7 +17,7 @@ public class ModuleInfo : IModule
         Description = MeetingNotesModuleInfo.Description,
         Categories = "Headless",
         Version = MeetingNotesModuleInfo.Version,
-        ReleaseVersions = MeetingNotesModuleInfo.Version,
+        ReleaseVersions = "1.0.0",
         ServerManagerType = "StudioElf.Module.CRM.MeetingNotes.Manager.MeetingNotesManager, StudioElf.Module.CRM.MeetingNotes.Oqtane",
         Dependencies = "StudioElf.Module.CRM.Shared.Oqtane",
         PackageName = "StudioElf.Module.CRM.MeetingNotes"
